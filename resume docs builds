@@ -1,0 +1,18 @@
+import os
+from docx import Document
+import markdown
+from bs4 import BeautifulSoup
+
+def build_resume(master_md_path, job_description):
+    # Read master markdown resume
+    with open(master_md_path, 'r', encoding='utf-8') as f:
+        md_content = f.read()
+
+    # Convert markdown to HTML, then to plain text
+    html = markdown.markdown(md_content)
+    soup = BeautifulSoup(html, features="html.parser")
+    text = soup.get_text()
+
+    # Create docx
+    doc = Document()
+    doc.add_heading('Resume', 0)
