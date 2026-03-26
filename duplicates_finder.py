@@ -231,6 +231,76 @@ def suggest_titles(root: Path, csv_out: Optional[Path] = None):
         print(f"Could not save CSV: {e}")
 
 
+def rename_from_csv(csv_path: Optional[Path] = None, base_dir: Path = HARD_CODED_PATH, dry_run: bool = False):
+    """Read CSV (Original File, New File) and rename files under base_dir.
+
+    - csv_path: Path to CSV. If None, defaults to script sibling CSV.
+    - base_dir: directory where original files live.
+    - dry_run: if True, only print planned renames.
+    """
+    csv_path = Path(csv_path) if csv_path else Path(__file__).with_suffix('.csv')
+    if not csv_path.exists():
+        print(f"Rename CSV not found: {csv_path}")
+        return
+
+    renamed = []
+    skipped = []
+    errors = []
+
+    with csv_path.open('r', encoding='utf-8', newline='') as fh:
+        reader = csv.reader(fh)
+        header = next(reader, None)
+        for row in reader:
+            if not row or len(row) < 2:
+                continue
+            orig_name = row[0].strip()
+            new_name = row[1].strip()
+            if not orig_name or not new_name:
+                continue
+
+            src = base_dir / orig_name
+            # try case-insensitive fallback
+            if not src.exists():
+                matches = [p for p in base_dir.iterdir() if p.name.lower() == orig_name.lower()]
+                if matches:
+                    src = matches[0]
+            if not src.exists():
+                skipped.append((orig_name, new_name, 'source not found'))
+                print(f"SKIP: source not found: {orig_name}")
+                continue
+
+            dst = base_dir / new_name
+            # if destination exists, find a non-colliding name
+            if dst.exists():
+                base = dst.stem
+                ext = dst.suffix
+                i = 1
+                while True:
+                    candidate = base_dir / f"{base}_renamed_{i}{ext}"
+                    if not candidate.exists():
+                        dst = candidate
+                        break
+                    i += 1
+
+            print(f"RENAME: {src.name} -> {dst.name}")
+            if dry_run:
+                renamed.append((src.name, dst.name))
+                continue
+
+            try:
+                src.rename(dst)
+                renamed.append((src.name, dst.name))
+            except Exception as e:
+                errors.append((src.name, dst.name, str(e)))
+                print(f"ERROR renaming {src} -> {dst}: {e}")
+
+    print(f"\nRename summary: renamed={len(renamed)}, skipped={len(skipped)}, errors={len(errors)}")
+    if errors:
+        print("Errors:")
+        for e in errors:
+            print(" ", e)
+
+
 # ------------------------ CLI / entry point ------------------------
 
 if __name__ == '__main__':
@@ -240,3 +310,5 @@ if __name__ == '__main__':
     find_duplicates(HARD_CODED_PATH)
     print()
     suggest_titles(HARD_CODED_PATH)
+    # After generating suggestions, perform renames based on CSV (dry_run=False performs actual renames)
+    rename_from_csv()
